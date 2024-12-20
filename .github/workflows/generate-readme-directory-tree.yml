@@ -1,0 +1,46 @@
+name: Update README with Tree Structure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install tree
+      run: sudo apt-get install tree
+
+    - name: Generate tree structure
+      run: |
+        tree -L 2 > tree_output.txt
+
+    - name: Update README.md
+      run: |
+        START_SYNTAX="<!-- START_TREE -->"
+        STOP_SYNTAX="<!-- END_TREE -->"
+        
+        # Read the current README content
+        README_CONTENT=$(cat README.md)
+        
+        # Extract the tree output
+        TREE_OUTPUT=$(cat tree_output.txt)
+        
+        # Create the new content to insert
+        NEW_CONTENT="${START_SYNTAX}\n\`\`\`\n${TREE_OUTPUT}\n\`\`\`\n${STOP_SYNTAX}"
+        
+        # Replace the content between START_SYNTAX and STOP_SYNTAX
+        NEW_README=$(echo "$README_CONTENT" | sed -e "/${START_SYNTAX}/,/${STOP_SYNTAX}/c\\${NEW_CONTENT}")
+        
+        # Write the new content back to README.md
+        echo "$NEW_README" > README.md
+
+    - name: Commit and push if changed
+      run: |
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "GitHub Actions"
+        git add README.md
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update README with latest tree structure" && git push)

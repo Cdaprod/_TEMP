@@ -1,0 +1,119 @@
+name: CDA Prototype Workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cda-prototype:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        task: [generate-readme-tree, test-coverage, dependency-analysis, lint-code, go-fix, build, generate-callgraph, tag-version, package, docker-build-push]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.19'
+
+      - name: Run task
+        id: run_task
+        run: |
+          case "${{ matrix.task }}" in
+            generate-readme-tree)
+              tree -L 2 -I 'node_modules|venv|.git' > dir_tree.txt
+              echo "## Directory Tree" > README.tmp
+              cat dir_tree.txt >> README.tmp
+              cat README.md >> README.tmp
+              mv README.tmp README.md
+              ;;
+            test-coverage)
+              go test ./... -coverprofile=coverage.out
+              ;;
+            dependency-analysis)
+              go list -m all > dependencies.txt
+              ;;
+            lint-code)
+              go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+              golangci-lint run ./... > lint-results.txt
+              ;;
+            go-fix)
+              go fmt ./...
+              go install golang.org/x/tools/cmd/goimports@latest
+              goimports -w .
+              ;;
+            build)
+              go build -v -o cda-prototype ./...
+              ;;
+            generate-callgraph)
+              go install github.com/ofabry/go-callvis@latest
+              mkdir -p reports
+              go-callvis -focus main -group pkg,type -exclude "thirdparty|generated" . > reports/callgraph.dot
+              dot -Tpng reports/callgraph.dot -o reports/callgraph.png
+              ;;
+            tag-version)
+              git config --global user.email "action@github.com"
+              git config --global user.name "GitHub Action"
+              git tag -a v0.2.0 -m "Release version 0.2.0"
+              git push origin v0.2.0
+              ;;
+            package)
+              mkdir -p release
+              tar -czf release/cda-prototype-v0.2.0.tar.gz cda-prototype
+              ;;
+            docker-build-push)
+              docker build -t cdaprod/cda-prototype:v0.2.0 .
+              echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+              docker push cdaprod/cda-prototype:v0.2.0
+              ;;
+          esac
+
+      - name: Upload Coverage to Codecov
+        if: matrix.task == 'test-coverage'
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.out
+
+      - name: Commit and push updates
+        if: |
+          (steps.run_task.outputs.success == 'true') && 
+          (matrix.task == 'generate-readme-tree' || 
+           matrix.task == 'dependency-analysis' || 
+           matrix.task == 'lint-code' ||
+           matrix.task == 'go-fix')
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git add README.md dependencies.txt lint-results.txt
+          git commit -m "Auto-update by GitHub Actions for task: ${{ matrix.task }}"
+          git push
+        continue-on-error: true
+
+      - name: Upload Release Asset
+        if: matrix.task == 'package'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./release/cda-prototype-v0.2.0.tar.gz
+          asset_name: cda-prototype-v0.2.0.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Display Results and Logs
+        if: failure()
+        run: |
+          echo "Task ${{ matrix.task }} failed. See logs for more details."
+          exit 1
+
+      - name: Cleanup and Finalize
+        if: always()
+        run: |
+          echo "Cleaning up workspace and finalizing."

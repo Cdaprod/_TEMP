@@ -1,0 +1,11 @@
+Generate multiple artifacts:
+
+README.md 
+
+our builtins in pkg/ 
+
+Registry builtins for:
+
+api.go(integration ops for adding deployed applications, services, external “plugins” which we would call our modular components) git.go(accounts/orgs/keys, repos, projects, gists, actions, runs, runners with repo data using gh api) docker.go(containers, images, volumes, ports, networks, services, contexts, whatever makes it more capable of seamlessness)
+
+We need to shrink the actual implementation of builtins and put it in builtins.go and move it out from whatever .go file it’s currently implement in

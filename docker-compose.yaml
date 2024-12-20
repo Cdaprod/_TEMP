@@ -1,0 +1,19 @@
+version: '3.9'
+
+# Common base configurations
+x-base-service: &base-service
+  restart: unless-stopped
+  networks:
+    - core_network
+  environment:
+    LOG_LEVEL: "${LOG_LEVEL:-info}"
+    CONFIG_PATH: "/config/config.yaml"
+
+x-db-service: &db-service
+  <<: *base-service
+  environment:
+    DB_USER: "${DB_USER:-defaultuser}"
+    DB_PASSWORD: "${DB_PASSWORD:-defaultpassword}"
+    DB_HOST: "db-service"
+  volumes:
+    - db-data:/var/lib/postgresql/data
